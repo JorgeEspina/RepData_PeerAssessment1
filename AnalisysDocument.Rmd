@@ -1,0 +1,145 @@
+---
+title: "Data Analysis - Daily Steps Takes"
+author: "Jorge Espina"
+date: "2/7/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE , cache = FALSE)
+```
+1. Loading the data
+-------------------
+
+We set the working directory followed by downloading the dataset from its url and unzipping the file to "step_data.csv". The data comes from Roger Pengs [github account](https://github.com/rdpeng/RepData_PeerAssessment1).
+```{r load data}
+unzip(zipfile = "activity.zip")
+unlink("activity.zip")
+
+library(ggplot2)
+library(plyr)
+library(scales)
+library(lattice) 
+activity <- read.csv("activity.csv")
+
+activity$date <- as.Date(activity$date, "%Y-%m-%d")
+activity <- as.data.frame(activity)
+
+```
+
+2. Mean of "total number of step taken per day" over all days
+-------------------------------------------------------------
+Calculate the total number of steps taken per day and histogram Total Steps per Day
+
+```{r  total number of step raken day}
+
+steps <- with(activity, tapply(steps, date, sum, na.rm = TRUE))
+hist(steps, breaks=6, xlab="Steps", main = "Total Steps per Day")
+
+
+```
+Media
+```{r  media}
+mean(steps) 
+
+
+```
+Mediana
+```{r  mediana}
+
+median(steps)
+
+```
+3. Average daily activity pattern
+-------------------------------------------------------------
+In this section, we make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken averaged across all days.
+```{r  averange daily activity }
+sumTable <- aggregate(activity$steps ~ activity$date, FUN=sum, )
+colnames(sumTable)<- c("Date", "Steps")
+
+clean <- activity[!is.na(activity$steps),]
+
+```
+create average number of steps per interval
+```{r  create number of steps interval}
+intervalTable <- ddply(clean, .(interval), summarize, Avg = mean(steps))
+
+
+```
+Create line plot of average number of steps per interval
+```{r  Average Number of Steps per Interval}
+p <- ggplot(intervalTable, aes(x=interval, y=Avg), xlab = "Interval", ylab="Average Number of Steps")
+p + geom_line()+xlab("Interval")+ylab("Average Number of Steps")+ggtitle("Average Number of Steps per Interval")
+
+```
+
+Maximum steps by interval
+```{r  maximum steps by interval}
+maxSteps <- max(intervalTable$Avg)
+
+
+```
+
+Which interval contains the maximum average number of steps
+```{r  interval contains the max}
+
+intervalTable[intervalTable$Avg==maxSteps,1]
+
+```
+4. Imputing missing values
+--------------------------
+
+First of all, let us get a sense for the missing values. Are there days with all time intervals reporting NA step values? 
+We can replace the missing data for a day by the time average over all other days.
+
+```{r  dataac}
+activity$day <- weekdays(as.Date(activity$date))
+activity$DateTime<- as.POSIXct(activity$date, format="%Y-%m-%d")
+clean <- activity[!is.na(activity$steps),]
+nrow(activity[is.na(activity$steps),])
+avgTable <- ddply(clean, .(interval, day), summarize, Avg = mean(steps))
+nadata<- activity[is.na(activity$steps),]
+newdata<-merge(nadata, avgTable, by=c("interval", "day"))
+newdata2<- newdata[,c(6,4,1,2,5)]
+colnames(newdata2)<- c("steps", "date", "interval", "day", "DateTime")
+mergeData <- rbind(clean, newdata2)
+sumTable2 <- aggregate(mergeData$steps ~ mergeData$date, FUN=sum, )
+colnames(sumTable2)<- c("Date", "Steps")
+
+## Mean of Steps with NA data taken care of
+as.integer(mean(sumTable2$Steps))
+
+## Median of Steps with NA data taken care of
+as.integer(median(sumTable2$Steps))
+
+
+```
+Creating the histogram of total steps per day, categorized by data set to show impact
+
+```{r  histogram of total steps per day, categorized by data set to show impact}
+hist(sumTable2$Steps, breaks=5, xlab="Steps", main = "Total Steps per Day with NAs Fixed", col="Blue")
+hist(sumTable$Steps, breaks=5, xlab="Steps", main = "Total Steps per Day with NAs Fixed", col="Orange", add=T)
+legend("topright", c("Imputed Data", "Non-NA Data"), fill=c("blue", "orange") )
+
+```
+
+5. Differences in activity patterns: Weekdays vs Weekends
+---------------------------------------------------------
+
+Create a new column describing if the date is a weekday or weekend.
+
+Create new category based on the days of the week
+```{r  create new category}
+
+mergeData$DayCategory <- ifelse(mergeData$day %in% c("sabado", "domingo"),"Weekend","Weekday")
+intervalTable2 <- ddply(mergeData, .(interval, DayCategory), summarize, Avg = mean(steps))
+
+```
+
+Creating Plot Average Steps per Interval Based on Type of Day
+
+```{r  plot}
+
+xyplot(Avg~interval|DayCategory, data=intervalTable2, type="l",layout = c(0,2),main="Average Steps per Interval Based on Type of Day"
+       ,ylab="Average Number of Steps", xlab="Interval")
+```
